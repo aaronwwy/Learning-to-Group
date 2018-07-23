@@ -1,0 +1,6 @@
+{
+    "python.pythonPath": "/media/deepglint/Data/Learning-to-Group/bin/python",
+    "python.formatting.provider": "yapf",
+    "python.linting.pylintEnabled": false,
+    "python.linting.enabled": false
+}

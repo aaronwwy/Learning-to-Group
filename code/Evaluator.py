@@ -82,11 +82,11 @@ def evaluate(gt, res, ignore_labels):
         else:
             res_ids = gtid2resid[gt_key]
             total_join_times += len(res_ids) - 1
-    fout = open('test_operatenum', 'a')
-    fout.write(
-        str(len(res)) + ' ' + str(total_delete_times) + ' ' +
-        str(total_add_times) + ' ' + str(total_join_times) + '\n')
-    fout.close()
+    # fout = open('test_operatenum', 'a')
+    # fout.write(
+    #     str(len(res)) + ' ' + str(total_delete_times) + ' ' +
+    #     str(total_add_times) + ' ' + str(total_join_times) + '\n')
+    # fout.close()
 
     score = 6 * total_delete_times + 1 * total_add_times + total_join_times
     # print 'Delete: ', total_delete_times, 'Add: ', total_add_times, 'Join: ', total_join_times
