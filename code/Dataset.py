@@ -106,6 +106,36 @@ def create_train_album_list(config):
     print('...create train album list file done...')
 
 
+def create_reid_album_list(config):
+    album_list_fn = config.get('REID', 'ALBUM_LIST_FILE')
+    album_train_list_fn = config.get('REID', 'TRAIN_ALBUM_LIST_FILE')
+    album_test_list_fn = config.get('REID', 'TEST_ALBUM_LIST_FILE')
+    if os.path.exists(album_list_fn):
+        print('...album list file already exists, skip...')
+        return
+
+    formatted_feature_dir = config.get('REID', 'FORMATTED_PROFILE_DATA_FOLDER')
+    album_list = [f for f in os.listdir(formatted_feature_dir)]
+    train_prop = float(config.get('REID', 'TRAIN_ALBUM_PROPORTION'))
+    album_train_list = np.random.choice(album_list, train_prop * len(album_list), replace=False)
+    album_test_list = [a for a in album_list if a not in album_train_list]
+    with open(album_list_fn, 'w') as alf:
+        alf.write('\n'.join([
+            os.path.join(formatted_feature_dir, album) for album in album_list
+        ]))
+        print('...create reid album list file done...')
+    with open(album_train_list_fn, 'w') as atrlf:
+        atrlf.write('\n'.join([
+            os.path.join(formatted_feature_dir, album) for album in album_list
+        ]))
+        print('...create reid train album list file done...')
+    with open(album_test_list_fn, 'w') as atelf:
+        atelf.write('\n'.join([
+            os.path.join(formatted_feature_dir, album) for album in album_list
+        ]))
+        print('...create reid test album list file done...')
+
+
 class Dataset:
     def __init__(self, config):
         self.datasetID = 0
@@ -261,11 +291,12 @@ if __name__ == '__main__':
         config = ConfigParser.ConfigParser()
         config.read('/media/deepglint/Data/Learning-to-Group/code/config.ini')
 
-        format(config)
-        create_train_album_list(config)
+        # reid dateset already formatted
+        # format(config)
+        create_reid_album_list(config)
 
         b = identity_Dataset(config)
-        album_list_fn = config.get('TEST', 'TRAIN_ALBUM_LIST_FILE')
+        album_list_fn = config.get('REID', 'TRAIN_ALBUM_LIST_FILE')
         b.loadAlbumList(album_list_fn)
         c = b.SimulateDataset(1000, 0.5, 0.5)
 

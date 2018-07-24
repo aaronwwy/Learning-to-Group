@@ -50,6 +50,9 @@ class frame:
         self.Threshold_Quality = 0.05  #质量分离阈值
         self.Threshold_Passerby = 2  #路人阈值
         self.getlabel = None  #从外部接受label进行处理
+        self.config = ConfigParser.ConfigParser()
+        self.findrootconfig.read(
+            '/media/deepglint/Data/Learning-to-Group/code/config.ini')
 
     def loadDataset(self, dataset):
         # print "load dataset start"
@@ -135,7 +138,7 @@ class frame:
         print "showResult start"
         shutil.rmtree(r'Visualize')
         os.mkdir('Visualize')
-        path_head = '/media/deepglint/Data/Learning-to-Group/data/'
+        path_head = self.config.get('TEST', 'DATA_DIR')
         for index in xrange(0, self.size):
             path = self.dataset.imageNameList[index]
             path_back = path[0]
@@ -433,11 +436,14 @@ class frame:
             return 0
         self.S = S
         self.D = D
-        #判断S,D类型：Point / Group
         type_s = self.InGroup(S)
         type_d = self.InGroup(D)
-        #针对S\D类型输出参数
-        package = [self.Quality[S], self.Quality[D], self.AffinityMatrix[S][D]]
+        # the quality model is not accurate for pedestrain dataset
+        # before we have the trained quality model on pedestrain dataset
+        # we just ignore the quality item
+        package = [
+            self.Quality[S] * 0, self.Quality[D] * 0, self.AffinityMatrix[S][D]
+        ]
         if type_s == False and type_d == False:  #point----point
             self.package = package
             return package
@@ -450,7 +456,8 @@ class frame:
         elif type_s == True and type_d == False:  #group----point
             K_select = self.get_Knearest(S)
             package = [
-                self.Quality[D], self.Quality[S], self.AffinityMatrix[D][S]
+                self.Quality[D] * 0, self.Quality[S] * 0,
+                self.AffinityMatrix[D][S]
             ]
             for index in K_select:
                 package.append(self.AffinityMatrix[D][index])
@@ -473,21 +480,24 @@ class frame:
         #print 'save train_data begin'
         data_type = len(self.package)
         if data_type == 3:  #3
-            fout = open('data/traindata_p2p', 'a')
+            fout = open(
+                self.config.get('REID', 'REWARD_P2P_MODEL_TRAIN_DATA'), 'a')
             fout.write(str(gt))
             for i in xrange(0, len(self.package)):
                 fout.write(" " + str(i + 1) + ":" + str(self.package[i]))
             fout.write("\n")
             fout.close()
         elif data_type == 3 + self.k_size:
-            fout = open('data/traindata_p2G', 'a')
+            fout = open(
+                self.config.get('REID', 'REWARD_P2G_MODEL_TRAIN_DATA'), 'a')
             fout.write(str(gt))
             for i in xrange(0, len(self.package)):
                 fout.write(" " + str(i + 1) + ":" + str(self.package[i]))
             fout.write("\n")
             fout.close()
         else:
-            fout = open('data/traindata_G2G', 'a')
+            fout = open(
+                self.config.get('REID', 'REWARD_G2G_MODEL_TRAIN_DATA'), 'a')
             fout.write(str(gt))
             for i in xrange(0, len(self.package)):
                 fout.write(" " + str(i + 1) + ":" + str(self.package[i]))
@@ -495,9 +505,9 @@ class frame:
             fout.close()
         #print 'save train_data finished'
 
-    #action=１or 0　１加入　０　拒绝
+    # action = １ [merge] or 0 [reject]
     def setPerception(self, action):
-        if action[0] == 1:  #加入
+        if action[0] == 1:  # merge
             self.join(self.S, self.D)
             if self.dataset.imgID[self.S] == self.dataset.imgID[self.D]:
                 return True
@@ -512,7 +522,7 @@ class frame:
                 self.save_traindata(pp)
                 self.traingetnum += 1
                 return False
-        else:  #拒绝
+        else:  # reject
             if self.dataset.imgID[self.S] == 1 and self.dataset.imgID[self.
                                                                       D] == 1:
                 return True
@@ -533,7 +543,7 @@ class frame:
         else:
             return True
 
-    #正规化label:1 路人　２侧脸　3++　类别
+    # format label: 1 passerby　２ profile　3++　identities
     def Normalize_label(self):
         dict_group = dict()
         dict_group_Q = dict()
@@ -586,7 +596,6 @@ class frame:
                 #print dict_index[root_i],dict_average_Q[root_i],len(dict_group[root_i])
         # print 'profile num:' + str(profile_num)
         # print 'passerby num:' + str(passerby_num)
-
 
     def preTrainData(self, n):
         print('...create train data for cold start...')
