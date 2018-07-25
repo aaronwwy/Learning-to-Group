@@ -115,21 +115,32 @@ def create_reid_album_list(config):
         return
 
     formatted_feature_dir = config.get('REID', 'FORMATTED_PROFILE_DATA_FOLDER')
-    album_list = [f for f in os.listdir(formatted_feature_dir)]
+    album_list = [
+        f for f in os.listdir(formatted_feature_dir) if '-1' not in f
+    ]
+
+    np.random.seed(20180724)
     train_prop = float(config.get('REID', 'TRAIN_ALBUM_PROPORTION'))
-    album_train_list = np.random.choice(album_list, train_prop * len(album_list), replace=False)
+    album_train_list = np.random.choice(
+        album_list, int(train_prop * len(album_list)), replace=False)
     album_test_list = [a for a in album_list if a not in album_train_list]
     with open(album_list_fn, 'w') as alf:
+        alf.write(os.path.join(formatted_feature_dir, '-1.txt'))
+        alf.write('\n')
         alf.write('\n'.join([
             os.path.join(formatted_feature_dir, album) for album in album_list
         ]))
         print('...create reid album list file done...')
     with open(album_train_list_fn, 'w') as atrlf:
+        atrlf.write(os.path.join(formatted_feature_dir, '-1.txt'))
+        atrlf.write('\n')
         atrlf.write('\n'.join([
             os.path.join(formatted_feature_dir, album) for album in album_list
         ]))
         print('...create reid train album list file done...')
     with open(album_test_list_fn, 'w') as atelf:
+        atelf.write(os.path.join(formatted_feature_dir, '-1.txt'))
+        atelf.write('\n')
         atelf.write('\n'.join([
             os.path.join(formatted_feature_dir, album) for album in album_list
         ]))
@@ -155,7 +166,7 @@ class Dataset:
         fin = open(featurefileName, 'r')
         text_data = fin.read().splitlines()
         #训练用格式：
-        for i in xrange(0, len(text_data) / 3):
+        for i in tqdm(xrange(0, len(text_data) / 3)):
             self.imageNameList.append([text_data[i * 3]])
             self.feature.append(map(float, text_data[i * 3 + 2].split()))
             if len(self.feature[-1]) != 128:
@@ -163,7 +174,7 @@ class Dataset:
                 print(featurefileName)
                 print(text_data[i * 3])
                 # assert False
-            # the ground truth label unknown at training stage
+            # just fill something
             self.imgID.append(0)
             self.size += 1
         '''
@@ -185,22 +196,22 @@ class Dataset:
             print(np.array(self.feature).shape)
             # print(self.feature[0])
             raise
-        # print "finished compute!"
+        print "Compute Affinity finished"
 
     def computeQuality(self):
         # print 'Compute Quality start'
-        model_saved_path = self.config.get('TEST',
+        model_saved_path = self.config.get('REID',
                                            'PROFILE_TRAINED_MODEL_PATH')
         model = svm_load_model(model_saved_path)
         #model=svm_load_model('model/model_profile_300.model')
         # print(len(self.imgID), self.size)
         p_label, p_acc, p_vals = svm_predict(
-            [-1 if self.imgID[i] == 2 else 1 for i in range(0, self.size)],
+            [-1 if self.imgID[i] == 0 else 1 for i in range(0, self.size)],
             self.feature, model, '-b 1 -q')
         #    p_label_b,p_acc_b,p_vals_b=svm_predict([self.imgID[i]==2 for i in range(0,self.size)],self.feature,model_b)
         self.Quality = [x[1] for x in p_vals]
         #self.Quality=[1 for x in xrange(self.size)]
-        # print 'Compute Quality finished'
+        print 'Compute Quality finished'
 
 
 class identity_Dataset:
@@ -212,8 +223,9 @@ class identity_Dataset:
     def loadAlbumList(self, albumlistname):
         fin = open(albumlistname, 'r')
         text_data = fin.read().splitlines()
-        id = 1
-        for filepath in text_data:
+        id = 0
+        print('...load album list...')
+        for filepath in tqdm(text_data):
             temp = Dataset(self.config)
             temp.loadfeature(filepath)
             temp.datasetID = id
@@ -230,7 +242,7 @@ class identity_Dataset:
         #load identity_image
         identity_size = albumsize * identity_ratio
         identity_num = 0
-        album_shuffle = range(2, self.albumCount)
+        album_shuffle = range(1, self.albumCount)
         random.shuffle(album_shuffle)
         for identity_index in album_shuffle:  #xrange(2,self.albumCount):
             albumnum += 1
@@ -249,7 +261,7 @@ class identity_Dataset:
         #load profile_image
         profile_size = albumsize * profile_ratio
         profile_num = 0
-        profile_index = 1
+        profile_index = 0
         album_shuffle = range(0, self.album[profile_index].size)
         random.shuffle(album_shuffle)
         albumnum += 1
@@ -264,22 +276,22 @@ class identity_Dataset:
             profile_num += 1
 
         #load passerby_image
-        passerby_size = albumsize - profile_size - identity_size
-        passerby_num = 0
-        passerby_index = 0
-        album_shuffle = range(0, self.album[passerby_index].size)
-        random.shuffle(album_shuffle)
-        if passerby_size > 0:
-            albumnum += 1
-        for i in album_shuffle:
-            if passerby_num >= passerby_size:
-                break
-            dataset.imageNameList.append(
-                self.album[passerby_index].imageNameList[i])
-            # dataset.rect.append(self.album[passerby_index].rect[i])
-            dataset.feature.append(self.album[passerby_index].feature[i])
-            dataset.imgID.append(self.album[passerby_index].datasetID)
-            passerby_num += 1
+        # passerby_size = albumsize - profile_size - identity_size
+        # passerby_num = 0
+        # passerby_index = 0
+        # album_shuffle = range(0, self.album[passerby_index].size)
+        # random.shuffle(album_shuffle)
+        # if passerby_size > 0:
+        #     albumnum += 1
+        # for i in album_shuffle:
+        #     if passerby_num >= passerby_size:
+        #         break
+        #     dataset.imageNameList.append(
+        #         self.album[passerby_index].imageNameList[i])
+        #     # dataset.rect.append(self.album[passerby_index].rect[i])
+        #     dataset.feature.append(self.album[passerby_index].feature[i])
+        #     dataset.imgID.append(self.album[passerby_index].datasetID)
+        #     passerby_num += 1
 
         dataset.albumnum = albumnum
         dataset.size = len(dataset.imgID)

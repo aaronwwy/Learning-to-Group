@@ -25,10 +25,12 @@ class ProfileDataset:
         new_ids = None
         if self.n_negative > self.n_positive:
             new_ids = np.random.choice(neg_ids, len(pos_ids), replace=False)
-            new_ids.extend(pos_ids)
+            new_ids = np.concatenate((new_ids, pos_ids))
+            # new_ids.extend(pos_ids)
         else:
             new_ids = np.random.choice(pos_ids, len(neg_ids), replace=False)
-            new_ids.extend(neg_ids)
+            new_ids = np.concatenate((new_ids, neg_ids))
+            # new_ids.extend(neg_ids)
         np.random.shuffle(new_ids)
         self.features = [self.features[i] for i in new_ids]
         self.imgfns = [self.imgfns[i] for i in new_ids]
@@ -113,8 +115,8 @@ class ProfileDataset:
 
 def train(config, model_name):
     start = time.time()
-
-    param = svm_parameter('-h 0 -b 1')
+    
+    param = svm_parameter('-h 0 -b 1 -m 1000')
     if model_name == 'face':
         y, x = svm_read_problem(
             config.get('TEST', 'PROFILE_DATA_LIBSVM_FORMAT_SAVED_PATH'))
@@ -220,7 +222,7 @@ def virtualize_pesreid_quantity(model_name='reid'):
     # print(len(neg_imgs), len(pos_imgs))
 
     # random choice 3 images from pos and neg respectively
-    for j in range(100):
+    for j in range(100):    
         show_imgs = list(np.random.choice(neg_imgs, 10))
         show_imgs.extend(list(np.random.choice(pos_imgs, 10)))
         fig = plt.figure(figsize=(128, 64))
@@ -237,21 +239,21 @@ def virtualize_pesreid_quantity(model_name='reid'):
 
 
 def train_models(config, model_name='reid'):
-    # if model_name == 'face':
-    #     dataset = ProfileDataset(config.get('TEST', 'PROFILE_DATA_FOLDER'))
-    # elif model_name == 'reid':
-    #     dataset = ProfileDataset(config.get('REID', 'PROFILE_DEV_DATA_FOLDER'))
-    # dataset.build()
-    # assert len(dataset.features) == len(dataset.labels) == len(
-    #     dataset.imgfns) == dataset.size
-    # print(dataset.size, dataset.n_negative, dataset.n_positive)
-    # if model_name == 'face':
-    #     dataset.convert2libsvm(
-    #         0.8, config.get('TEST', 'PROFILE_DATA_LIBSVM_FORMAT_SAVED_PATH'))
-    # elif model_name == 'reid':
-    #     dataset.convert2libsvm(
-    #         0.8, config.get('REID', 'PROFILE_DATA_LIBSVM_FORMAT_SAVED_PATH'))
-    # train(config, model_name)
+    if model_name == 'face':
+        dataset = ProfileDataset(config.get('TEST', 'PROFILE_DATA_FOLDER'))
+    elif model_name == 'reid':
+        dataset = ProfileDataset(config.get('REID', 'PROFILE_DEV_DATA_FOLDER'))
+    dataset.build()
+    assert len(dataset.features) == len(dataset.labels) == len(
+        dataset.imgfns) == dataset.size
+    print(dataset.size, dataset.n_negative, dataset.n_positive)
+    if model_name == 'face':
+        dataset.convert2libsvm(
+            0.8, config.get('TEST', 'PROFILE_DATA_LIBSVM_FORMAT_SAVED_PATH'))
+    elif model_name == 'reid':
+        dataset.convert2libsvm(
+            0.8, config.get('REID', 'PROFILE_DATA_LIBSVM_FORMAT_SAVED_PATH'))
+    train(config, model_name)
     test(config, model_name)
 
 
@@ -265,5 +267,5 @@ def main():
 
 
 if __name__ == '__main__':
-    virtualize_pesreid_quantity()
-    # main()
+    # virtualize_pesreid_quantity()
+    main()
