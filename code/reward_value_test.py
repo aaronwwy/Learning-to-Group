@@ -16,7 +16,7 @@ import os
 
 
 class test:
-    def __init__(self):
+    def __init__(self, config, inference=False):
         self.Album = None
         self.dataset = None
         self.frame = None
@@ -36,6 +36,8 @@ class test:
         self.edge = list()
         self.result = list()
         self.accept = list()
+        self.config = config
+        self.inference = inference
         #0.9 0.6
 
     def setbatch(self, batchsize):
@@ -71,7 +73,7 @@ class test:
 
     def output(self, batch, value_R):
         if len(batch[0]) == 3:
-            fout = open('data/traindata_Q_p2p', 'a')
+            fout = open(self.config.get('REID', 'Q_P2P_MODEL_TRAIN_DATA'), 'a')
             fout.write(str(value_R))
             fout.write(' ' + '0:' + str(batch[1][0]))
             for i in xrange(0, 3):
@@ -79,7 +81,7 @@ class test:
             fout.write('\n')
             fout.close()
         elif len(batch[0]) == 3 + self.frame.k_size:
-            fout = open('data/traindata_Q_p2G', 'a')
+            fout = open(self.config.get('REID', 'Q_P2G_MODEL_TRAIN_DATA'), 'a')
             fout.write(str(value_R))
             fout.write(' ' + '0:' + str(batch[1][0]))
             for i in xrange(0, 3 + self.frame.k_size):
@@ -87,7 +89,7 @@ class test:
             fout.write('\n')
             fout.close()
         else:
-            fout = open('data/traindata_Q_G2G', 'a')
+            fout = open(self.config.get('REID', 'Q_G2G_MODEL_TRAIN_DATA'), 'a')
             fout.write(str(value_R))
             fout.write(' ' + '0:' + str(batch[1][0]))
             for i in xrange(0, 3 + 2 * self.frame.k_size):
@@ -96,23 +98,29 @@ class test:
             fout.close()
 
     def begintest(self, iteration=0):
-        model_R_p2p = svm_load_model('model/model_R_p2p.model')
-        model_R_p2G = svm_load_model('model/model_R_p2G.model')
-        model_R_G2G = svm_load_model('model/model_R_G2G.model')
+        model_R_p2p = svm_load_model(
+            os.path.join(
+                self.config.get('REID', 'REWARD_MODEL_SAVED_PATH'),
+                'model_r_p2p.model'))
+        model_R_p2G = svm_load_model(
+            os.path.join(
+                self.config.get('REID', 'REWARD_MODEL_SAVED_PATH'),
+                'model_r_p2g.model'))
+        model_R_G2G = svm_load_model(
+            os.path.join(
+                self.config.get('REID', 'REWARD_MODEL_SAVED_PATH'),
+                'model_r_g2g.model'))
 
         is_first_iteration = False
 
-        if os.path.exists('model/model_Q_p2p_%d.model' %
-            (iteration)):
+        model_dir = self.config.get('REID', 'REWARD_MODEL_SAVED_PATH')
+        if os.path.exists(os.path.join(model_dir, 'model_q_p2p.model')):
             model_Q_p2p = xgb.Booster(
-                model_file='model/model_Q_p2p_%d.model' %
-                (iteration))
+                model_file=os.path.join(model_dir, 'model_q_p2p.model'))
             model_Q_p2G = xgb.Booster(
-                model_file='model/model_Q_p2G_%d.model' %
-                (iteration))
+                model_file=os.path.join(model_dir, 'model_q_p2g.model'))
             model_Q_G2G = xgb.Booster(
-                model_file='model/model_Q_G2G_%d.model' %
-                (iteration))
+                model_file=os.path.join(model_dir, 'model_q_g2g.model'))
         else:
             is_first_iteration = True
 
@@ -229,7 +237,7 @@ class test:
             #get the variance of operate number
             self.frame.Normalize_label()
             operatenum_pre = Evaluator.evaluate(self.dataset.imgID,
-                                                self.frame.label, [1, 2])
+                                                self.frame.label, [0])
 
             #check the action is True or False
             action_result = self.frame.setPerception(action)
@@ -238,18 +246,19 @@ class test:
             #save history
             self.puthistory(package, action, reward_action, operatenum_pre)
 
-        #calculate Metric
-        self.frame.Normalize_label()
-        self.Recall = Evaluate.Recall(self.dataset.imgID, self.frame.label)
-        self.Precision = Evaluate.Precision(self.dataset.imgID,
-                                            self.frame.label)
-        self.operatenum = Evaluator.evaluate(self.dataset.imgID,
-                                             self.frame.label, [1, 2])
-        self.Recall_edge = Evaluate.Recall_edge(self.dataset.imgID,
-                                                self.frame.label, 1)
-        self.Precision_edge = Evaluate.Precision_edge(self.dataset.imgID,
-                                                      self.frame.label)
-        print self.dataset.size, self.Recall_edge, self.Precision_edge, self.operatenum
+        if not self.inference:
+            #calculate Metric
+            self.frame.Normalize_label()
+            self.Recall = Evaluate.Recall(self.dataset.imgID, self.frame.label)
+            self.Precision = Evaluate.Precision(self.dataset.imgID,
+                                                self.frame.label)
+            self.operatenum = Evaluator.evaluate(self.dataset.imgID,
+                                                self.frame.label, [0])
+            self.Recall_edge = Evaluate.Recall_edge(self.dataset.imgID,
+                                                    self.frame.label, 0)
+            self.Precision_edge = Evaluate.Precision_edge(self.dataset.imgID,
+                                                        self.frame.label)
+            print self.dataset.size, self.Recall_edge, self.Precision_edge, self.operatenum
 
 
 if __name__ == '__main__':

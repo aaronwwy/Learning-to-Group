@@ -1,7 +1,7 @@
 #coding=utf-8#
 from __future__ import division
 import sys
-import Queue
+# import Queue
 from Dataset import *
 import PIL.Image as Image
 from PIL import ImageFile
@@ -25,11 +25,12 @@ def findXY(Index, n):
     while Index >= (n - k):
         Index -= (n - k)
         k += 1
-    return k - 1, k + Index
+    return (k - 1, k + Index)
 
 
 class frame:
-    def __init__(self):
+    def __init__(self, training=True):
+        self.training = training
         self.size = 0
         self.queue = None  #边表队列n*n个元素
         self.dataset = None  #模拟相册
@@ -40,18 +41,18 @@ class frame:
         self.AffinityMatrix = None  #相关矩阵
         self.Quality = None  #人脸质量
         self.k_size = 5  #超参数，附加个数
-        self.trainbatch = 15  #每收集batch重新训练
+        self.trainbatch = 100  #每收集batch重新训练
         self.traingetnum = 0  #一轮训练中已经获得的训练数据条目
         self.S = None  #上一步中取得的节点S
-        self.D = None  #上一步中取得的节点D
+        self.D = None  #上一步中取得的节点
         self.package = None  #记录上一步取出的特征
         self.albumnum = 0  #该相册中照片分类数量
-        self.Threshold = 0.60  #相关度阈值0.60   vis 72
-        self.Threshold_Quality = 0.05  #质量分离阈值
-        self.Threshold_Passerby = 2  #路人阈值
+        self.Threshold = 0  #相关度阈值0.60   vis 72
+        self.Threshold_Quality = 0.5  #质量分离阈值
+        # self.Threshold_Passerby = 2  #路人阈值
         self.getlabel = None  #从外部接受label进行处理
         self.config = ConfigParser.ConfigParser()
-        self.findrootconfig.read(
+        self.config.read(
             '/media/deepglint/Data/Learning-to-Group/code/config.ini')
 
     def loadDataset(self, dataset):
@@ -70,14 +71,24 @@ class frame:
         self.label = list([0] * self.size)
         #获得降序排列的边
         # print "....translate Queue start"
-        self.queue = Queue.Queue(self.size * self.size)
+        # self.queue = Queue.Queue(self.size * self.size)
+        self.queue = []
         DescentIndex = sorted(
             range(len(Affinity)), key=lambda k: Affinity[k], reverse=True)
         for index in DescentIndex:
             if Affinity[index] > self.Threshold:
-                self.queue.put(findXY(index, self.size))
+                self.queue.append(findXY(index, self.size))
             else:
                 break
+        
+        n_pos = 2500
+        n_neg = 7500
+        np.random.seed(20180724)
+        neg_ids = np.random.choice(range(n_pos, len(self.queue)), n_neg, replace=False)
+        negs = [self.queue[i] for i in neg_ids]
+        self.queue = self.queue[:n_pos]
+        self.queue.extend(negs)
+        assert len(self.queue) == n_pos + n_neg
         #random candidate list
         '''
         temp=[]
@@ -109,19 +120,20 @@ class frame:
 
     def showQueue(self, n):
         print "showQueue start"
-        shutil.rmtree('QueueVisualize')
+        if os.path.exists('QueueVisualize'):
+            shutil.rmtree('QueueVisualize')
         os.mkdir('QueueVisualize')
-        for index in xrange(1, n + 1):
-            imageLink = self.queue.get()
+        for index in tqdm(xrange(1, n + 1)):
+            imageLink = self.queue.pop(0)
             fig = plt.figure()
             path_a = self.dataset.imageNameList[imageLink[0]]
             path_b = self.dataset.imageNameList[imageLink[1]]
             im_a = Image.open(path_a[0])
             im_b = Image.open(path_b[0])
-            im_a = im_a.crop(self.getRect(imageLink[0], im_a.size))
-            im_b = im_b.crop(self.getRect(imageLink[1], im_b.size))
-            im_a = im_a.resize((256, 256))
-            im_b = im_b.resize((256, 256))
+            # im_a = im_a.crop(self.getRect(imageLink[0], im_a.size))
+            # im_b = im_b.crop(self.getRect(imageLink[1], im_b.size))
+            # im_a = im_a.resize((256, 256))
+            # im_b = im_b.resize((256, 256))
             a = fig.add_subplot(2, 1, 0)
             imgplot = plt.imshow(im_a)
             imgplot.axes.get_xaxis().set_visible(False)
@@ -419,31 +431,34 @@ class frame:
         return feature
 
     def getObservation(self):
-        if self.queue.empty() == False:
-            linkage = self.queue.get()
+        if len(self.queue) > 0:
+            if self.training:
+                rand = np.random.choice([0, 1], 1, p=[0.25, 0.75])[0]
+                if rand == 0:
+                    linkage = self.queue.pop(0)
+                else:
+                    rand_id = np.random.choice(range(len(self.queue)), 1)[0]
+                    linkage = self.queue.pop(rand_id)
+            else:
+                linkage = self.queue.pop(0)
         else:
             return 0
         while self.findroot(linkage[0]) == self.findroot(linkage[1]):
-            if self.queue.empty():
+            if len(self.queue) == 0:
                 return 0
-            linkage = self.queue.get()
+            linkage = self.queue.pop(0)
 
             #print 'delete edge'
         S = linkage[0]
         D = linkage[1]
         if self.AffinityMatrix[S][D] < self.Threshold:
-            self.queue = Queue.Queue()
+            self.queue = []
             return 0
         self.S = S
         self.D = D
         type_s = self.InGroup(S)
         type_d = self.InGroup(D)
-        # the quality model is not accurate for pedestrain dataset
-        # before we have the trained quality model on pedestrain dataset
-        # we just ignore the quality item
-        package = [
-            self.Quality[S] * 0, self.Quality[D] * 0, self.AffinityMatrix[S][D]
-        ]
+        package = [self.Quality[S], self.Quality[D], self.AffinityMatrix[S][D]]
         if type_s == False and type_d == False:  #point----point
             self.package = package
             return package
@@ -456,8 +471,7 @@ class frame:
         elif type_s == True and type_d == False:  #group----point
             K_select = self.get_Knearest(S)
             package = [
-                self.Quality[D] * 0, self.Quality[S] * 0,
-                self.AffinityMatrix[D][S]
+                self.Quality[D], self.Quality[S], self.AffinityMatrix[D][S]
             ]
             for index in K_select:
                 package.append(self.AffinityMatrix[D][index])
@@ -511,39 +525,40 @@ class frame:
             self.join(self.S, self.D)
             if self.dataset.imgID[self.S] == self.dataset.imgID[self.D]:
                 return True
-            elif self.dataset.imgID[self.S] == 1 and self.dataset.imgID[self.
-                                                                        D] == 2:
-                return True
-            elif self.dataset.imgID[self.S] == 2 and self.dataset.imgID[self.
-                                                                        D] == 1:
-                return True
+            # note that we don't have passerby
+            # so just ignore judge below
+            # elif self.dataset.imgID[self.S] == 0 and self.dataset.imgID[self.
+            #                                                             D] == 2:
+            #     return True
+            # elif self.dataset.imgID[self.S] == 2 and self.dataset.imgID[self.
+            #                                                             D] == 0:
+            #     return True
             else:
-                pp = 0
-                self.save_traindata(pp)
+                self.save_traindata(0)
                 self.traingetnum += 1
                 return False
         else:  # reject
-            if self.dataset.imgID[self.S] == 1 and self.dataset.imgID[self.
-                                                                      D] == 1:
+            if self.dataset.imgID[self.S] == 0 and self.dataset.imgID[self.
+                                                                      D] == 0:
                 return True
-            elif self.dataset.imgID[self.S] == 2 and self.dataset.imgID[self.
-                                                                        D] == 2:
-                return True
+            # just ignore
+            # elif self.dataset.imgID[self.S] == 2 and self.dataset.imgID[self.
+            #                                                             D] == 2:
+            #     return True
             elif self.dataset.imgID[self.S] == self.dataset.imgID[self.D]:
                 self.save_traindata(1)
-                self.traingetnum += 0.2
+                self.traingetnum += 1
                 return False
             else:
                 return True
-                pass
 
     def checkState(self):
-        if self.queue.empty() or self.trainbatch <= self.traingetnum:
+        if len(self.queue) == 0 or self.trainbatch <= self.traingetnum:
             return False
         else:
             return True
 
-    # format label: 1 passerby　２ profile　3++　identities
+    # format label: no passerby　0 profile　1++　identities
     def Normalize_label(self):
         dict_group = dict()
         dict_group_Q = dict()
@@ -564,7 +579,7 @@ class frame:
         #calculate Average Quality
         dict_average_Q = dict()
         dict_index = dict()
-        indexbase = 3
+        indexbase = 1
         passerby_num = 0
         profile_num = 0
         for root_i in dict_group_Q:
@@ -575,14 +590,15 @@ class frame:
                 #print 'Profile_filter:',dict_average_Q[root_i],len(dict_group[root_i])
                 for i in dict_group[root_i]:
                     # if self.label[i]==0:
-                    self.label[i] = 2
+                    self.label[i] = 0
                     profile_num += 1
             #设定路人阈值
-            elif len(dict_group[root_i]) < self.Threshold_Passerby:
-                passerby_num += 1
-                for i in dict_group[root_i]:
-                    if self.label[i] == 0:
-                        self.label[i] = 1
+            # no passerby
+            # elif len(dict_group[root_i]) < self.Threshold_Passerby:
+            #     passerby_num += 1
+            #     for i in dict_group[root_i]:
+            #         if self.label[i] == 0:
+            #             self.label[i] = 1
             else:
                 if dict_index.has_key(root_i):
                     pass
@@ -618,9 +634,9 @@ if __name__ == '__main__':
     config.read('/media/deepglint/Data/Learning-to-Group/code/config.ini')
 
     b = identity_Dataset(config)
-    train_album_list_fn = config.get('TEST', 'TRAIN_ALBUM_LIST_FILE')
+    train_album_list_fn = config.get('REID', 'TRAIN_ALBUM_LIST_FILE')
     b.loadAlbumList(train_album_list_fn)
-    c = b.SimulateDataset(1000, 0.5, 0.4)
+    c = b.SimulateDataset(1000, 0.5, 0.5)
     c.computeAffinity()
     c.computeQuality()
     f = frame()

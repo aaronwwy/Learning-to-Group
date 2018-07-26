@@ -2,7 +2,7 @@
 from __future__ import division
 
 
-#默认1:路人　2:侧脸及误检　3+:grouped
+#默认 no:路人　0:侧脸及误检　1+:grouped
 #召回率
 def Recall(gt, result):
     sum_C = 0
@@ -10,11 +10,11 @@ def Recall(gt, result):
     sum_noise = 0
     F = len(gt)
     for i in xrange(0, len(result)):
-        if result[i] != 1 and result[i] != 2:
+        if result[i] != 0:
             sum_C += 1
-            if gt[i] == 1 or gt[i] == 2:
+            if gt[i] == 0:
                 sum_n += 1
-        if gt[i] == 1 or gt[i] == 2:
+        if gt[i] == 0:
             sum_noise += 1
     # print sum_C, sum_n, sum_noise, F
     # print 'Recall:%d\tSum:%d' % (sum_C, F)
@@ -34,17 +34,13 @@ def Precision(gt, result):
             dict_group[groupID].append(gt[i])
     sum_misgroup = 0
     #对每个group分别求众数
-    if dict_group.has_key(1) and dict_group.has_key(2):
+    if dict_group.has_key(0):
         pd = 1
-        print '1:%d\t2:%d' % (len(dict_group[1]), len(dict_group[2]))
-    elif dict_group.has_key(1) == False and dict_group.has_key(2) == True:
-        pd = 2
-    elif dict_group.has_key(1) == True and dict_group.has_key(2) == False:
-        pd = 2
+        print('0:{}'.format(len(dict_group[0])))
     else:
-        pd = 3
+        pd = 0
 
-    for i in xrange(3, len(dict_group) + pd):
+    for i in xrange(pd, len(dict_group)):
         arr_appear = dict((a, dict_group[i].count(a)) for a in dict_group[i])
         # 统计各个元素出现的次数
         mode = max(arr_appear.values())
@@ -86,13 +82,13 @@ def Recall_edge(gt, result, ignore):
     mis_edge = 0
     sum_edge = 0
     for t in dict_label:
-        if ignore == 1 and (t == 1 or t == 2):
+        if ignore == 0 and t == 0:
             continue
         else:
             arr = list()
             for ti in dict_label[t]:
                 arr.append(len(dict_label[t][ti]))
-                if ti == 1 or ti == 2:
+                if ti == 0:
                     ni = len(dict_label[t][ti])
                     mis_edge += ni * (ni - 1) / 2
             mis_edge += misedge(arr)
@@ -119,7 +115,7 @@ def Precision_edge(gt, result):
     sum_true = 0
     sum_all = 0
     for t in dict_label:
-        if t == 1 or t == 2:
+        if t == 0:
             continue
         else:
             arr = list()
@@ -134,7 +130,11 @@ def Precision_edge(gt, result):
 
             sum_true += edge_true
             sum_all += edge_all
-            precision_list.append(edge_true / edge_all)
+
+            if edge_all == 0:
+                precision_list.append(0)
+            else:
+                precision_list.append(edge_true / edge_all)
 
 # print precision_list
     # print 'Precision_edge', sum_true, sum_all

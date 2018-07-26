@@ -196,7 +196,7 @@ class Dataset:
             print(np.array(self.feature).shape)
             # print(self.feature[0])
             raise
-        print "Compute Affinity finished"
+        # print "Compute Affinity finished"
 
     def computeQuality(self):
         # print 'Compute Quality start'
@@ -211,7 +211,7 @@ class Dataset:
         #    p_label_b,p_acc_b,p_vals_b=svm_predict([self.imgID[i]==2 for i in range(0,self.size)],self.feature,model_b)
         self.Quality = [x[1] for x in p_vals]
         #self.Quality=[1 for x in xrange(self.size)]
-        print 'Compute Quality finished'
+        # print 'Compute Quality finished'
 
 
 class identity_Dataset:
@@ -235,8 +235,8 @@ class identity_Dataset:
         fin.close()
 
     #identity_ratio+profile_ratio < 1.0
-    def SimulateDataset(self, albumsize, identity_ratio, profile_ratio):
-        # random.seed(20180718)
+    def SimulateDataset(self, albumsize, identity_ratio, profile_ratio, s=0):
+        random.seed(s)
         dataset = Dataset(self.config)
         albumnum = 0
         #load identity_image
