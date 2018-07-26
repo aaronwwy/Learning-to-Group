@@ -29,7 +29,7 @@ def findXY(Index, n):
 
 
 class frame:
-    def __init__(self, training=True):
+    def __init__(self, rbs=[None, None, None], training=True):
         self.training = training
         self.size = 0
         self.queue = None  #边表队列n*n个元素
@@ -54,6 +54,30 @@ class frame:
         self.config = ConfigParser.ConfigParser()
         self.config.read(
             '/media/deepglint/Data/Learning-to-Group/code/config.ini')
+        self.replay_buffer_p2p = rbs[0]
+        self.replay_buffer_p2g = rbs[1]
+        self.replay_buffer_g2g = rbs[2]
+        self.replay_buffers = [
+            self.replay_buffer_p2p, self.replay_buffer_p2g,
+            self.replay_buffer_g2g
+        ]
+
+    def reset(self):
+        self.size = 0
+        self.queue = None  #边表队列n*n个元素
+        self.dataset = None  #模拟相册
+        self.UnionFind = list()  #并查集
+        self.groupsize = list()
+        self.gt = None
+        self.label = list()  #结果输出list
+        self.AffinityMatrix = None  #相关矩阵
+        self.Quality = None  #人脸质量
+        self.traingetnum = 0  #一轮训练中已经获得的训练数据条目
+        self.S = None  #上一步中取得的节点S
+        self.D = None  #上一步中取得的节点
+        self.package = None  #记录上一步取出的特征
+        self.albumnum = 0  #该相册中照片分类数量
+        self.getlabel = None  #从外部接受label进行处理
 
     def loadDataset(self, dataset):
         # print "load dataset start"
@@ -80,11 +104,12 @@ class frame:
                 self.queue.append(findXY(index, self.size))
             else:
                 break
-        
+
         n_pos = 2500
         n_neg = 7500
         np.random.seed(20180724)
-        neg_ids = np.random.choice(range(n_pos, len(self.queue)), n_neg, replace=False)
+        neg_ids = np.random.choice(
+            range(n_pos, len(self.queue)), n_neg, replace=False)
         negs = [self.queue[i] for i in neg_ids]
         self.queue = self.queue[:n_pos]
         self.queue.extend(negs)
@@ -519,8 +544,23 @@ class frame:
             fout.close()
         #print 'save train_data finished'
 
+    def save_traindata_rb(self, gt):
+        #print 'save train_data begin'
+        data_type = len(self.package)
+        rec = str(gt)
+        for i in xrange(0, len(self.package)):
+            rec += " " + str(i + 1) + ":" + str(self.package[i])
+
+        if data_type == 3:  #3
+            self.replay_buffer_p2p.add(rec)
+        elif data_type == 3 + self.k_size:
+            self.replay_buffer_p2g.add(rec)
+        else:
+            self.replay_buffer_g2g.add(rec)
+        #print 'save train_data finished'
+
     # action = １ [merge] or 0 [reject]
-    def setPerception(self, action):
+    def setPerception(self, action, save=True):
         if action[0] == 1:  # merge
             self.join(self.S, self.D)
             if self.dataset.imgID[self.S] == self.dataset.imgID[self.D]:
@@ -534,7 +574,8 @@ class frame:
             #                                                             D] == 0:
             #     return True
             else:
-                self.save_traindata(0)
+                if save:
+                    self.save_traindata_rb(0)
                 self.traingetnum += 1
                 return False
         else:  # reject
@@ -546,17 +587,24 @@ class frame:
             #                                                             D] == 2:
             #     return True
             elif self.dataset.imgID[self.S] == self.dataset.imgID[self.D]:
-                self.save_traindata(1)
+                if save:
+                    self.save_traindata_rb(1)
                 self.traingetnum += 1
                 return False
             else:
                 return True
 
-    def checkState(self):
-        if len(self.queue) == 0 or self.trainbatch <= self.traingetnum:
-            return False
+    def checkState(self, check_batch=True):
+        if check_batch:
+            if len(self.queue) == 0 or self.trainbatch <= self.traingetnum:
+                return False
+            else:
+                return True
         else:
-            return True
+            if len(self.queue) == 0:
+                return False
+            else:
+                return True
 
     # format label: no passerby　0 profile　1++　identities
     def Normalize_label(self):
@@ -614,6 +662,13 @@ class frame:
         # print 'passerby num:' + str(passerby_num)
 
     def preTrainData(self, n):
+        idset = identity_Dataset(self.config)
+        train_album_list_fn = self.config.get('REID', 'TRAIN_ALBUM_LIST_FILE')
+        idset.loadAlbumList(train_album_list_fn)
+        sdset = idset.SimulateDataset(n, 0.5, 0.5)
+        sdset.computeAffinity()
+        sdset.computeQuality()
+        self.loadDataset(sdset)
         print('...create train data for cold start...')
         for i in xrange(0, n):
             d = self.getObservation()
@@ -627,6 +682,14 @@ class frame:
                 gt = 0
             self.save_traindata(gt)
         print('...done...')
+
+    def init_replay_buffer_from_file(self):
+        self.replay_buffer_p2p.add2(
+            self.config.get('REID', 'REWARD_P2P_MODEL_TRAIN_DATA'))
+        self.replay_buffer_p2g.add2(
+            self.config.get('REID', 'REWARD_P2G_MODEL_TRAIN_DATA'))
+        self.replay_buffer_g2g.add2(
+            self.config.get('REID', 'REWARD_G2G_MODEL_TRAIN_DATA'))
 
 
 if __name__ == '__main__':

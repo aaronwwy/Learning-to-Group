@@ -13,10 +13,11 @@ import numpy as np
 import xgboost as xgb
 import time
 import os
+import pickle
 
 
 class test:
-    def __init__(self, config, inference=False):
+    def __init__(self, config, rbs, inference=False, output2file=False):
         self.Album = None
         self.dataset = None
         self.frame = None
@@ -38,13 +39,49 @@ class test:
         self.accept = list()
         self.config = config
         self.inference = inference
+        self.replay_buffers = rbs
+        self.replay_buffer_p2p = self.replay_buffers[0]
+        self.replay_buffer_p2g = self.replay_buffers[1]
+        self.replay_buffer_g2g = self.replay_buffers[2]
+        if output2file:
+            self.output_method = self.output
+        else:
+            self.output_method = self.output_rb
         #0.9 0.6
+    def init_replay_buffer_from_file(self):
+        self.replay_buffer_p2p.add2(
+            self.config.get('REID', 'Q_P2P_MODEL_TRAIN_DATA'))
+        self.replay_buffer_p2g.add2(
+            self.config.get('REID', 'Q_P2G_MODEL_TRAIN_DATA'))
+        self.replay_buffer_g2g.add2(
+            self.config.get('REID', 'Q_G2G_MODEL_TRAIN_DATA'))
+
+    def reset(self, inference=False, output2file=False):
+        self.Album = None
+        self.dataset = None
+        self.frame = None
+        self.num = None
+        self.Recall = 0
+        self.Precision = 0
+        self.Recall_edge = 0
+        self.Precision_edge = 0
+        self.operatenum = None
+        self.dirname = None
+        self.history = list()
+        self.edge = list()
+        self.result = list()
+        self.accept = list()
+        self.inference = inference
+        if output2file:
+            self.output_method = self.output
+        else:
+            self.output_method = self.output_rb
 
     def setbatch(self, batchsize):
         self.frame.trainbatch = batchsize
 
     def loadSimulate(self, dataset):
-        f = frame.frame()
+        f = frame.frame(training=False)
         f.loadDataset(dataset)
         self.frame = f
         self.dataset = dataset
@@ -64,7 +101,7 @@ class test:
             #获取Q_value
             value_R = self.QValue(self.history, 0)
             #输出该记录
-            self.output(self.history[0], value_R)
+            self.output_method(self.history[0], value_R)
             #keep the length of history queue constant
             del self.history[0]
             self.history.append((feature, action, reward_action, Op))
@@ -97,19 +134,55 @@ class test:
             fout.write('\n')
             fout.close()
 
+    def output_rb(self, batch, value_R):
+        if len(batch[0]) == 3:
+            rec = str(value_R)
+            rec += ' ' + '0:' + str(batch[1][0])
+            for i in xrange(0, 3):
+                rec += ' ' + str(i + 1) + ':' + str(batch[0][i])
+            self.replay_buffer_p2p.add(rec)
+        elif len(batch[0]) == 3 + self.frame.k_size:
+            rec = str(value_R)
+            rec += ' ' + '0:' + str(batch[1][0])
+            for i in xrange(0, 3 + self.frame.k_size):
+                rec += ' ' + str(i + 1) + ':' + str(batch[0][i])
+            self.replay_buffer_p2g.add(rec)
+        else:
+            rec = str(value_R)
+            rec += ' ' + '0:' + str(batch[1][0])
+            for i in xrange(0, 3 + 2 * self.frame.k_size):
+                rec += ' ' + str(i + 1) + ':' + str(batch[0][i])
+            self.replay_buffer_g2g.add(rec)
+
     def begintest(self, iteration=0):
-        model_R_p2p = svm_load_model(
-            os.path.join(
-                self.config.get('REID', 'REWARD_MODEL_SAVED_PATH'),
-                'model_r_p2p.model'))
-        model_R_p2G = svm_load_model(
-            os.path.join(
-                self.config.get('REID', 'REWARD_MODEL_SAVED_PATH'),
-                'model_r_p2g.model'))
-        model_R_G2G = svm_load_model(
-            os.path.join(
-                self.config.get('REID', 'REWARD_MODEL_SAVED_PATH'),
-                'model_r_g2g.model'))
+        # model_R_p2p = svm_load_model(
+        #     os.path.join(
+        #         self.config.get('REID', 'REWARD_MODEL_SAVED_PATH'),
+        #         'model_r_p2p.model'))
+        # model_R_p2G = svm_load_model(
+        #     os.path.join(
+        #         self.config.get('REID', 'REWARD_MODEL_SAVED_PATH'),
+        #         'model_r_p2g.model'))
+        # model_R_G2G = svm_load_model(
+        #     os.path.join(
+        #         self.config.get('REID', 'REWARD_MODEL_SAVED_PATH'),
+        #         'model_r_g2g.model'))
+        with open(
+                os.path.join(
+                    self.config.get('REID', 'REWARD_MODEL_SAVED_PATH'),
+                    'model_r_p2p.model')) as f:
+            model_R_p2p = pickle.load(f)
+        with open(
+                os.path.join(
+                    self.config.get('REID', 'REWARD_MODEL_SAVED_PATH'),
+                    'model_r_p2g.model')) as f:
+            model_R_p2G = pickle.load(f)
+        with open(
+                os.path.join(
+                    self.config.get('REID', 'REWARD_MODEL_SAVED_PATH'),
+                    'model_r_g2g.model')) as f:
+            model_R_G2G = pickle.load(f)
+        
 
         is_first_iteration = False
 
@@ -133,7 +206,7 @@ class test:
         decision = Dicision.Dicision()
         t01 = time.time()
 
-        while self.frame.checkState():
+        while self.frame.checkState(check_batch=True):
             package = self.frame.getObservation()
             index += 1
             if type(package) == int:
@@ -144,8 +217,9 @@ class test:
             if question_type == 3:  #point-----point
                 tp = 'P2P'
                 #Reward Function
-                action_R, _, confidence = svm_predict([0], data, model_R_p2p,
-                                                      '-b 1 -q')
+                # action_R, _, confidence = svm_predict([0], data, model_R_p2p,
+                #                                       '-b 1 -q')
+                confidence = model_R_p2p.predict_proba(data)
                 #Reward Value Function: action = 0
                 temp = package[:]
                 temp.insert(0, 0)
@@ -173,8 +247,9 @@ class test:
             elif question_type == 3 + self.frame.k_size:  #point-----Group or group---point
                 tp = 'P2G'
                 #Reward Function
-                action_R, _, confidence = svm_predict([0], data, model_R_p2G,
-                                                      '-b 1 -q')
+                # action_R, _, confidence = svm_predict([0], data, model_R_p2G,
+                #                                       '-b 1 -q')
+                confidence = model_R_p2G.predict_proba(data)
                 #Reward Value Function: action = 0
                 temp = package[:]
                 temp.insert(0, 0)
@@ -201,8 +276,9 @@ class test:
             else:
                 tp = 'G2G'
                 #Reward Function
-                action_R, _, confidence = svm_predict([0], data, model_R_G2G,
-                                                      '-b 1 -q')
+                # action_R, _, confidence = svm_predict([0], data, model_R_G2G,
+                #                                       '-b 1 -q')
+                confidence = model_R_G2G.predict_proba(data)
                 #Reward Value Function: action = 0
                 temp = package[:]
                 temp.insert(0, 0)
@@ -240,7 +316,7 @@ class test:
                                                 self.frame.label, [0])
 
             #check the action is True or False
-            action_result = self.frame.setPerception(action)
+            action_result = self.frame.setPerception(action, save=False)
             if action_result == False:
                 reward_action = -reward_action
             #save history
@@ -253,11 +329,11 @@ class test:
             self.Precision = Evaluate.Precision(self.dataset.imgID,
                                                 self.frame.label)
             self.operatenum = Evaluator.evaluate(self.dataset.imgID,
-                                                self.frame.label, [0])
+                                                 self.frame.label, [0])
             self.Recall_edge = Evaluate.Recall_edge(self.dataset.imgID,
                                                     self.frame.label, 0)
-            self.Precision_edge = Evaluate.Precision_edge(self.dataset.imgID,
-                                                        self.frame.label)
+            self.Precision_edge = Evaluate.Precision_edge(
+                self.dataset.imgID, self.frame.label)
             print self.dataset.size, self.Recall_edge, self.Precision_edge, self.operatenum
 
 

@@ -72,6 +72,43 @@ class ReplayBuffer(object):
         return self._encode_sample(idxes)
 
 
+class ReplayBufferSimple(ReplayBuffer):
+    def __init__(self, size):
+        super(ReplayBufferSimple, self).__init__(size)
+
+    def add(self, record):
+        if self._next_idx >= len(self._storage):
+            self._storage.append(record)
+        else:
+            self._storage[self._next_idx] = record
+        self._next_idx = (self._next_idx + 1) % self._maxsize
+    
+    def add2(self, fn):
+        with open(fn, 'r') as f:
+            for rec in f.readlines():
+                self.add(rec.strip())
+
+    def _encode_sample(self, idxes):
+        recs = []
+        for i in idxes:
+            recs.append(self._storage[i])
+        return recs
+
+    def sample(self, batch_size):
+        idxes = [
+            random.randint(0,
+                           len(self._storage) - 1) for _ in range(batch_size)
+        ]
+        return self._encode_sample(idxes)
+
+    def sample2(self, fn, batch_size):
+        with open(fn, 'w') as f:
+            samples = self.sample(batch_size)
+            for s in samples:
+                f.write(s)
+                f.write('\n')
+
+
 class PrioritizedReplayBuffer(ReplayBuffer):
     def __init__(self, size, alpha):
         """Create Prioritized Replay buffer.

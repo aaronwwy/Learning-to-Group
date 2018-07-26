@@ -11,7 +11,10 @@ import load_test_data
 import traceback
 import ConfigParser
 import os
+import shutil
+import pickle
 from tqdm import tqdm
+from replay_buffer import ReplayBufferSimple
 '''
 reward Q-value and value-function 
 '''
@@ -50,37 +53,65 @@ def trainSVMModel(config):
     print 'Train new model finished'
 
 
-def trainXGBmodel(config):
+def trainXGBmodel(machine, config):
     print 'Train XGBoost model start'
+    machine.replay_buffer_p2p.sample2(
+        config.get('REID', 'Q_P2P_MODEL_TRAIN_DATA'), 1000)
+    machine.replay_buffer_p2g.sample2(
+        config.get('REID', 'Q_P2G_MODEL_TRAIN_DATA'), 1000)
+    machine.replay_buffer_g2g.sample2(
+        config.get('REID', 'Q_G2G_MODEL_TRAIN_DATA'), 1000)
     dtrain_p2p = xgb.DMatrix(config.get('REID', 'Q_P2P_MODEL_TRAIN_DATA'))
     dtrain_p2G = xgb.DMatrix(config.get('REID', 'Q_P2G_MODEL_TRAIN_DATA'))
     dtrain_G2G = xgb.DMatrix(config.get('REID', 'Q_G2G_MODEL_TRAIN_DATA'))
     param = {'max_depth': 5, 'eta': 1, 'silent': 1, 'objective': 'reg:linear'}
-    numround = 100
-    bst_p2p = xgb.train(param, dtrain_p2p, numround)
-    bst_p2G = xgb.train(param, dtrain_p2G, numround)
-    bst_G2G = xgb.train(param, dtrain_G2G, numround)
     model_dir = config.get('REID', 'REWARD_MODEL_SAVED_PATH')
+    numround = 100
+    bst_p2p = xgb.train(
+        param,
+        dtrain_p2p,
+        numround,
+        xgb_model=os.path.join(model_dir, 'model_q_p2p.model'))
+    bst_p2G = xgb.train(
+        param,
+        dtrain_p2G,
+        numround,
+        xgb_model=os.path.join(model_dir, 'model_q_p2g.model'))
+    bst_G2G = xgb.train(
+        param,
+        dtrain_G2G,
+        numround,
+        xgb_model=os.path.join(model_dir, 'model_q_g2g.model'))
     bst_p2p.save_model(os.path.join(model_dir, 'model_q_p2p.model'))
     bst_p2G.save_model(os.path.join(model_dir, 'model_q_p2g.model'))
     bst_G2G.save_model(os.path.join(model_dir, 'model_q_g2g.model'))
     print 'Train XGBoost model finished'
 
 
-def collect_start_date(idset, config, n):
+def collect_start_date(machine, idset, config, n):
     print('...collect start data...')
     batchsize = 4
-    for iteration in tqdm(range(100)):
-        dataset = idset.SimulateDataset(1000, 0.5, 0.5, s=20180725 - n * 100)
-        #dataset=load_test_data.load_LFW_dataset(filepath)
+    for _ in tqdm(range(100)):
+        dataset = idset.SimulateDataset(1000, 0.5, 0.5, s=20180725-n*100)
+        #dataset=load_test_data., fd_LFW_dataset(filepath)
         dataset.computeQuality()
         dataset.computeAffinity()
         #do this Dataset
-        machine = reward_value_test.test(config, inference=True)
+        machine.reset(inference=True, output2file=True)
         machine.loadSimulate(dataset)
         machine.setbatch(batchsize)
-        machine.begintest(iteration - 1)
-        batchsize += 1
+        # try:
+        machine.begintest(0)
+
+
+
+def testXGBmodel(machine, config):
+    with open(config.get('REID', 'XGBOOST_TEST_DATASET'), 'rb') as f:
+        test_dataset = pickle.load(f)
+        machine.reset(inference=False, output2file=False)
+        machine.loadSimulate(test_dataset)
+        machine.setbatch(4)
+        machine.begintest(1000)
 
 
 def main():
@@ -97,9 +128,17 @@ def main():
     iteration = 1
     batchsize = 4
 
+    rb_p2p_q = ReplayBufferSimple(size=10000)
+    rb_p2g_q = ReplayBufferSimple(size=10000)
+    rb_g2g_q = ReplayBufferSimple(size=10000)
+    rbs_q = [rb_p2p_q, rb_p2g_q, rb_g2g_q]
+
+    machine = reward_value_test.test(
+        config, rbs_q, inference=True, output2file=True)
+
     continue_collect_data = True
     for i in range(1, 10):
-        collect_start_date(a, config, n=i)
+        collect_start_date(machine, a, config, n=i)
         dtrain_p2p_fn = config.get('REID', 'Q_P2P_MODEL_TRAIN_DATA')
         dtrain_p2G_fn = config.get('REID', 'Q_P2G_MODEL_TRAIN_DATA')
         dtrain_G2G_fn = config.get('REID', 'Q_G2G_MODEL_TRAIN_DATA')
@@ -110,6 +149,13 @@ def main():
             break
         else:
             print('...start data not collect finish, continue...')
+    machine.init_replay_buffer_from_file()
+    # create test file
+    test_dataset = a.SimulateDataset(1000, 0.5, 0.5, s=31415926)
+    test_dataset.computeQuality()
+    test_dataset.computeAffinity()
+    with open(config.get('REID', 'XGBOOST_TEST_DATASET'), 'wb') as f:
+        pickle.dump(test_dataset, f)
 
     print('...training start...')
     while iteration < 1001:
@@ -117,11 +163,11 @@ def main():
         print '====================================================='
         print 'Iter: %d' % iteration
         dataset = a.SimulateDataset(1000, 0.5, 0.5, s=20180725 + iteration)
-        #dataset=load_test_data.load_LFW_dataset(filepath)
+        #dataset=load_test_data., fd_LFW_dataset(filepath)
         dataset.computeQuality()
         dataset.computeAffinity()
         #do this Dataset
-        machine = reward_value_test.test(config)
+        machine.reset(inference=False, output2file=False)
         machine.loadSimulate(dataset)
         machine.setbatch(batchsize)
         # try:
@@ -136,15 +182,16 @@ def main():
 
         batchsize += 1
         #训练新模型
-        if iteration % 100 == 0:
-            trainSVMModel(config)
-        trainXGBmodel(config)
+        # if iteration % 100 == 0:
+        # trainSVMModel(config)
+        trainXGBmodel(machine, config)
+        if iteration % 10 == 0:
+            testXGBmodel(machine, config)
         # print machine.operatenum
 
         iteration += 1
 
     print 'Done'
-
 
 if __name__ == '__main__':
     main()
