@@ -67,32 +67,79 @@ def trainXGBmodel(machine, config):
     param = {'max_depth': 5, 'eta': 1, 'silent': 1, 'objective': 'reg:linear'}
     model_dir = config.get('REID', 'REWARD_MODEL_SAVED_PATH')
     numround = 100
-    bst_p2p = xgb.train(
-        param,
-        dtrain_p2p,
-        numround,
-        xgb_model=os.path.join(model_dir, 'model_q_p2p.model'))
-    bst_p2G = xgb.train(
-        param,
-        dtrain_p2G,
-        numround,
-        xgb_model=os.path.join(model_dir, 'model_q_p2g.model'))
-    bst_G2G = xgb.train(
-        param,
-        dtrain_G2G,
-        numround,
-        xgb_model=os.path.join(model_dir, 'model_q_g2g.model'))
+    if not os.path.exists(os.path.join(model_dir, 'model_q_p2p.model')):
+        bst_p2p = xgb.train(param, dtrain_p2p, numround)
+        bst_p2G = xgb.train(param, dtrain_p2G, numround)
+        bst_G2G = xgb.train(param, dtrain_G2G, numround)
+    else:
+        bst_p2p = xgb.train(
+            param,
+            dtrain_p2p,
+            numround,
+            xgb_model=os.path.join(model_dir, 'model_q_p2p.model'))
+        bst_p2G = xgb.train(
+            param,
+            dtrain_p2G,
+            numround,
+            xgb_model=os.path.join(model_dir, 'model_q_p2g.model'))
+        bst_G2G = xgb.train(
+            param,
+            dtrain_G2G,
+            numround,
+            xgb_model=os.path.join(model_dir, 'model_q_g2g.model'))
     bst_p2p.save_model(os.path.join(model_dir, 'model_q_p2p.model'))
     bst_p2G.save_model(os.path.join(model_dir, 'model_q_p2g.model'))
     bst_G2G.save_model(os.path.join(model_dir, 'model_q_g2g.model'))
     print 'Train XGBoost model finished'
 
+def trainXGBmodel_v2(config):
+    print 'Train XGBoost model start'
+    param = {'max_depth': 5, 'eta': 1, 'silent': 1, 'objective': 'reg:linear'}
+    model_dir = config.get('REID', 'REWARD_MODEL_SAVED_PATH')
+    numround = 100
 
-def collect_start_date(machine, idset, config, n):
+    if os.path.exists(config.get('REID', 'Q_P2P_MODEL_TRAIN_DATA')):    
+        dtrain_p2p = xgb.DMatrix(config.get('REID', 'Q_P2P_MODEL_TRAIN_DATA'))
+        if not os.path.exists(os.path.join(model_dir, 'model_q_p2p.model')):
+            bst_p2p = xgb.train(param, dtrain_p2p, numround)
+        else:
+            bst_p2p = xgb.train(
+                param,
+                dtrain_p2p,
+                numround,
+                xgb_model=os.path.join(model_dir, 'model_q_p2p.model'))
+        bst_p2p.save_model(os.path.join(model_dir, 'model_q_p2p.model'))
+    
+    if os.path.exists(config.get('REID', 'Q_P2G_MODEL_TRAIN_DATA')):    
+        dtrain_p2g = xgb.DMatrix(config.get('REID', 'Q_P2G_MODEL_TRAIN_DATA'))
+        if not os.path.exists(os.path.join(model_dir, 'model_q_p2g.model')):
+            bst_p2g = xgb.train(param, dtrain_p2g, numround)
+        else:
+            bst_p2g = xgb.train(
+                param,
+                dtrain_p2g,
+                numround,
+                xgb_model=os.path.join(model_dir, 'model_q_p2g.model'))
+        bst_p2g.save_model(os.path.join(model_dir, 'model_q_p2g.model'))
+
+    if os.path.exists(config.get('REID', 'Q_G2G_MODEL_TRAIN_DATA')):    
+        dtrain_g2g = xgb.DMatrix(config.get('REID', 'Q_G2G_MODEL_TRAIN_DATA'))
+        if not os.path.exists(os.path.join(model_dir, 'model_q_g2g.model')):
+            bst_g2g = xgb.train(param, dtrain_g2g, numround)
+        else:
+            bst_g2g = xgb.train(
+                param,
+                dtrain_g2g,
+                numround,
+                xgb_model=os.path.join(model_dir, 'model_q_g2g.model'))
+        bst_g2g.save_model(os.path.join(model_dir, 'model_q_g2g.model'))
+    print 'Train XGBoost model finished'
+
+def collect_start_data(machine, idset, config, n):
     print('...collect start data...')
-    batchsize = 4
-    for _ in tqdm(range(100)):
-        dataset = idset.SimulateDataset(1000, 0.5, 0.5, s=20180725-n*100)
+    batchsize = 100
+    for _ in tqdm(range(10)):
+        dataset = idset.SimulateDataset(1000, 0.5, 0.5, s=20180725 - n * 100)
         #dataset=load_test_data., fd_LFW_dataset(filepath)
         dataset.computeQuality()
         dataset.computeAffinity()
@@ -101,22 +148,43 @@ def collect_start_date(machine, idset, config, n):
         machine.loadSimulate(dataset)
         machine.setbatch(batchsize)
         # try:
-        machine.begintest(0)
-
+        machine.begintest(1000)
 
 
 def testXGBmodel(machine, config):
+    print('...test model...')
     with open(config.get('REID', 'XGBOOST_TEST_DATASET'), 'rb') as f:
         test_dataset = pickle.load(f)
-        machine.reset(inference=False, output2file=False)
+        machine.reset(inference=False, output2file=True)
         machine.loadSimulate(test_dataset)
         machine.setbatch(4)
         machine.begintest(1000)
 
 
+def clean(config, data=True, model=True):
+    if data:
+        if os.path.exists(config.get('REID', 'Q_P2P_MODEL_TRAIN_DATA')):
+            try:
+                os.remove(config.get('REID', 'Q_P2P_MODEL_TRAIN_DATA'))
+                os.remove(config.get('REID', 'Q_P2G_MODEL_TRAIN_DATA'))
+                os.remove(config.get('REID', 'Q_G2G_MODEL_TRAIN_DATA'))
+            except:
+                pass
+    if model:
+        model_dir = config.get('REID', 'REWARD_MODEL_SAVED_PATH') 
+        if os.path.exists(os.path.join(model_dir, 'model_q_p2p.model')):
+            try:
+                os.remove(os.path.join(model_dir, 'model_q_p2p.model'))
+                os.remove(os.path.join(model_dir, 'model_q_p2g.model'))
+                os.remove(os.path.join(model_dir, 'model_q_g2g.model'))
+            except:
+                pass
+    
+
 def main():
     config = ConfigParser.ConfigParser()
     config.read('/media/deepglint/Data/Learning-to-Group/code/config.ini')
+    clean(config)
     a = Dataset.identity_Dataset(config)
     train_album_list_fn = config.get('REID', 'TRAIN_ALBUM_LIST_FILE')
     a.loadAlbumList(train_album_list_fn)
@@ -126,7 +194,7 @@ def main():
     data = list(list())
     data.append([0, 0, 0])
     iteration = 1
-    batchsize = 4
+    batchsize = 100
 
     rb_p2p_q = ReplayBufferSimple(size=10000)
     rb_p2g_q = ReplayBufferSimple(size=10000)
@@ -138,7 +206,7 @@ def main():
 
     continue_collect_data = True
     for i in range(1, 10):
-        collect_start_date(machine, a, config, n=i)
+        collect_start_data(machine, a, config, n=i)
         dtrain_p2p_fn = config.get('REID', 'Q_P2P_MODEL_TRAIN_DATA')
         dtrain_p2G_fn = config.get('REID', 'Q_P2G_MODEL_TRAIN_DATA')
         dtrain_G2G_fn = config.get('REID', 'Q_G2G_MODEL_TRAIN_DATA')
@@ -158,7 +226,7 @@ def main():
         pickle.dump(test_dataset, f)
 
     print('...training start...')
-    while iteration < 1001:
+    while iteration < 101:
         #for filepath in trainlist:
         print '====================================================='
         print 'Iter: %d' % iteration
@@ -167,7 +235,8 @@ def main():
         dataset.computeQuality()
         dataset.computeAffinity()
         #do this Dataset
-        machine.reset(inference=False, output2file=False)
+        machine.reset(inference=False, output2file=True)
+        clean(config, model=False)
         machine.loadSimulate(dataset)
         machine.setbatch(batchsize)
         # try:
@@ -184,7 +253,7 @@ def main():
         #训练新模型
         # if iteration % 100 == 0:
         # trainSVMModel(config)
-        trainXGBmodel(machine, config)
+        trainXGBmodel_v2(config)
         if iteration % 10 == 0:
             testXGBmodel(machine, config)
         # print machine.operatenum
@@ -192,6 +261,7 @@ def main():
         iteration += 1
 
     print 'Done'
+
 
 if __name__ == '__main__':
     main()

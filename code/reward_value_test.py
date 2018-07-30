@@ -96,10 +96,23 @@ class test:
             return history[index][-2] + self.beta * self.dtOp(
                 history, index) + self.gamma * self.QValue(history, index + 1)
 
-    def puthistory(self, feature, action, reward_action, Op):
+    def puthistory(self, feature, action, reward_action, Op, model):
         if len(self.history) >= self.maxbatch:
             #获取Q_value
             value_R = self.QValue(self.history, 0)
+            if model is None:
+                value_s_np1 = np.random.randn()
+            else:
+                try:
+                    sa = self.history[self.maxbatch - self.K][0].insert(
+                        0, self.history[self.maxbatch - self.K][1][0])
+                    print(np.array([sa]))
+                    value_s_np1 = model.predict(xgb.DMatrix(np.array([sa])))[0]
+                except:
+                    raise
+                value_s_np1 = value_s_np1 * (self.gamma**
+                                             (self.maxbatch - self.K))
+            value_R += value_s_np1
             #输出该记录
             self.output_method(self.history[0], value_R)
             #keep the length of history queue constant
@@ -182,7 +195,6 @@ class test:
                     self.config.get('REID', 'REWARD_MODEL_SAVED_PATH'),
                     'model_r_g2g.model')) as f:
             model_R_G2G = pickle.load(f)
-        
 
         is_first_iteration = False
 
@@ -214,12 +226,17 @@ class test:
                 break
             data[0] = package
             question_type = len(package)
+            model = None
             if question_type == 3:  #point-----point
+                if not is_first_iteration:
+                    model = model_Q_p2p.copy()
                 tp = 'P2P'
                 #Reward Function
                 # action_R, _, confidence = svm_predict([0], data, model_R_p2p,
                 #                                       '-b 1 -q')
-                confidence = model_R_p2p.predict_proba(data)
+                # confidence = model_R_p2p.predict_proba(data)
+                w = model_R_p2p.coef_[0]
+                b = model_R_p2p.intercept_[0]
                 #Reward Value Function: action = 0
                 temp = package[:]
                 temp.insert(0, 0)
@@ -245,11 +262,15 @@ class test:
                     action = [0]
 
             elif question_type == 3 + self.frame.k_size:  #point-----Group or group---point
+                if not is_first_iteration:
+                    model = model_Q_p2G.copy()
                 tp = 'P2G'
                 #Reward Function
                 # action_R, _, confidence = svm_predict([0], data, model_R_p2G,
                 #                                       '-b 1 -q')
-                confidence = model_R_p2G.predict_proba(data)
+                # confidence = model_R_p2G.predict_proba(data)
+                w = model_R_p2G.coef_[0]
+                b = model_R_p2G.intercept_[0]
                 #Reward Value Function: action = 0
                 temp = package[:]
                 temp.insert(0, 0)
@@ -274,11 +295,15 @@ class test:
                 else:
                     action = [0]
             else:
+                if not is_first_iteration:
+                    model = model_Q_G2G.copy()
                 tp = 'G2G'
                 #Reward Function
                 # action_R, _, confidence = svm_predict([0], data, model_R_G2G,
                 #                                       '-b 1 -q')
-                confidence = model_R_G2G.predict_proba(data)
+                # confidence = model_R_G2G.predict_proba(data)
+                w = model_R_G2G.coef_[0]
+                b = model_R_G2G.intercept_[0]
                 #Reward Value Function: action = 0
                 temp = package[:]
                 temp.insert(0, 0)
@@ -307,8 +332,9 @@ class test:
             if random.random() >= (0.025 * iteration):
                 action = [random.randint(0, 1)]
 
-            #get reward of the action
-            reward_action = 10 * abs(2 * max(confidence[0]) - 1)
+            # get reward of the action
+            # reward_action = 10 * abs(2 * confidence[0] - 1)
+            reward_action = abs(np.sum(np.multiply(w, package)) + b)
 
             #get the variance of operate number
             self.frame.Normalize_label()
@@ -320,7 +346,8 @@ class test:
             if action_result == False:
                 reward_action = -reward_action
             #save history
-            self.puthistory(package, action, reward_action, operatenum_pre)
+            self.puthistory(package, action, reward_action, operatenum_pre,
+                            model)
 
         if not self.inference:
             #calculate Metric
@@ -335,6 +362,13 @@ class test:
             self.Precision_edge = Evaluate.Precision_edge(
                 self.dataset.imgID, self.frame.label)
             print self.dataset.size, self.Recall_edge, self.Precision_edge, self.operatenum
+            with open(
+                    os.path.join(
+                        self.config.get('REID', 'REWARD_MODEL_SAVED_PATH'),
+                        'xgboost_output_nsteptd.log'), 'a') as f:
+                f.write('{}, {}, {}, {}\n'.format(
+                    self.dataset.size, self.Recall_edge, self.Precision_edge,
+                    self.operatenum))
 
 
 if __name__ == '__main__':
