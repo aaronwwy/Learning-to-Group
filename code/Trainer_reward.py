@@ -17,6 +17,9 @@ import time
 from tqdm import tqdm
 import numpy as np
 from replay_buffer import ReplayBufferSimple
+
+import warnings
+warnings.filterwarnings("ignore")
 '''
 reward Q-value and value-function 
 '''
@@ -121,7 +124,7 @@ def trainXGBmodel_v2(config):
     numround = 100
 
     if os.path.exists(config.get('REID', 'Q_P2P_MODEL_TRAIN_DATA')):
-        reward_normalize(config.get('REID', 'Q_P2P_MODEL_TRAIN_DATA'))
+        # reward_normalize(config.get('REID', 'Q_P2P_MODEL_TRAIN_DATA'))
         dtrain_p2p = xgb.DMatrix(config.get('REID', 'Q_P2P_MODEL_TRAIN_DATA'))
         if not os.path.exists(os.path.join(model_dir, 'model_q_p2p.model')):
             bst_p2p = xgb.train(param, dtrain_p2p, numround)
@@ -207,7 +210,7 @@ def clean(config, data=True, model=True):
 
 def main():
     config = ConfigParser.ConfigParser()
-    config.read('/media/deepglint/Data/Learning-to-Group/code/config.ini')
+    config.read('/mnt/sdc1/wenhaoli/Learning-to-Group/code/config.ini')
     clean(config)
     a = Dataset.identity_Dataset(config)
     train_album_list_fn = config.get('REID', 'TRAIN_ALBUM_LIST_FILE')
@@ -294,7 +297,7 @@ def main():
             testXGBmodel(machine, config)
         # print machine.operatenum
         with open(
-                '/media/deepglint/Data/Learning-to-Group/model/ReID/time.log',
+                '/mnt/sdc1/wenhaoli/Learning-to-Group/model/ReID/time.log',
                 'a') as f:
             f.write(' '.join(
                 map(str, [

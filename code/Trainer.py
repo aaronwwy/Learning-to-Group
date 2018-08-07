@@ -146,7 +146,7 @@ def save_ssvm_model(models, config):
 
 if __name__ == '__main__':
     config = ConfigParser.ConfigParser()
-    config.read('/media/deepglint/Data/Learning-to-Group/code/config.ini')
+    config.read('/mnt/sdc1/wenhaoli/Learning-to-Group/code/config.ini')
     a = Dataset.identity_Dataset(config)
     train_album_list_fn = config.get('REID', 'TRAIN_ALBUM_LIST_FILE')
     a.loadAlbumList(train_album_list_fn)

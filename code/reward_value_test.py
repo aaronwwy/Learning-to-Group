@@ -376,7 +376,7 @@ class test:
             with open(
                     os.path.join(
                         self.config.get('REID', 'REWARD_MODEL_SAVED_PATH'),
-                        'xgboost_output_nstepsarsa_origin_reward_norm.log'), 'a') as f:
+                        'xgboost_output_nstepsarsa_origin.log'), 'a') as f:
                 f.write('{}, {}, {}, {}\n'.format(
                     self.dataset.size, self.Recall_edge, self.Precision_edge,
                     self.operatenum))

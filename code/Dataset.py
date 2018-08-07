@@ -301,7 +301,7 @@ class identity_Dataset:
 if __name__ == '__main__':
     for _ in range(1):
         config = ConfigParser.ConfigParser()
-        config.read('/media/deepglint/Data/Learning-to-Group/code/config.ini')
+        config.read('/mnt/sdc1/wenhaoli/Learning-to-Group/code/config.ini')
 
         # reid dateset already formatted
         # format(config)

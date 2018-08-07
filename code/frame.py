@@ -53,7 +53,7 @@ class frame:
         self.getlabel = None  #从外部接受label进行处理
         self.config = ConfigParser.ConfigParser()
         self.config.read(
-            '/media/deepglint/Data/Learning-to-Group/code/config.ini')
+            '/mnt/sdc1/wenhaoli/Learning-to-Group/code/config.ini')
         self.replay_buffer_p2p = rbs[0]
         self.replay_buffer_p2g = rbs[1]
         self.replay_buffer_g2g = rbs[2]
@@ -694,7 +694,7 @@ class frame:
 
 if __name__ == '__main__':
     config = ConfigParser.ConfigParser()
-    config.read('/media/deepglint/Data/Learning-to-Group/code/config.ini')
+    config.read('/mnt/sdc1/wenhaoli/Learning-to-Group/code/config.ini')
 
     b = identity_Dataset(config)
     train_album_list_fn = config.get('REID', 'TRAIN_ALBUM_LIST_FILE')
