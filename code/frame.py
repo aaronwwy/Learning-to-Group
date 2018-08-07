@@ -48,7 +48,7 @@ class frame:
         self.package = None  #记录上一步取出的特征
         self.albumnum = 0  #该相册中照片分类数量
         self.Threshold = 0  #相关度阈值0.60   vis 72
-        self.Threshold_Quality = 0.5  #质量分离阈值
+        self.Threshold_Quality = 0  #质量分离阈值
         # self.Threshold_Passerby = 2  #路人阈值
         self.getlabel = None  #从外部接受label进行处理
         self.config = ConfigParser.ConfigParser()

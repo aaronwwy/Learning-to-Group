@@ -35,12 +35,9 @@ def Precision(gt, result):
     sum_misgroup = 0
     #对每个group分别求众数
     if dict_group.has_key(0):
-        pd = 1
         print('0:{}'.format(len(dict_group[0])))
-    else:
-        pd = 0
 
-    for i in xrange(pd, len(dict_group)):
+    for i in xrange(1, len(dict_group)):
         arr_appear = dict((a, dict_group[i].count(a)) for a in dict_group[i])
         # 统计各个元素出现的次数
         mode = max(arr_appear.values())

@@ -14,6 +14,7 @@ import xgboost as xgb
 import time
 import os
 import pickle
+import copy
 
 
 class test:
@@ -100,19 +101,23 @@ class test:
         if len(self.history) >= self.maxbatch:
             #获取Q_value
             value_R = self.QValue(self.history, 0)
-            if model is None:
-                value_s_np1 = np.random.randn()
-            else:
-                try:
-                    sa = self.history[self.maxbatch - self.K][0].insert(
-                        0, self.history[self.maxbatch - self.K][1][0])
-                    print(np.array([sa]))
-                    value_s_np1 = model.predict(xgb.DMatrix(np.array([sa])))[0]
-                except:
-                    raise
-                value_s_np1 = value_s_np1 * (self.gamma**
-                                             (self.maxbatch - self.K))
-            value_R += value_s_np1
+            if False:
+                if model is None:
+                    value_s_np1 = np.random.randn()
+                else:
+                    try:
+                        sa = copy.copy(self.history[self.maxbatch - self.K][0])
+                        sa.insert(0, self.history[self.maxbatch - self.K][1][0])
+                        value_s_np1 = model.predict(xgb.DMatrix(np.array([sa])))[0]
+                    except:
+                        print(self.history[self.maxbatch - self.K][0])
+                        print(self.history[self.maxbatch - self.K][1][0])
+                        print(self.history[self.maxbatch - self.K][0].insert(
+                            0, self.history[self.maxbatch - self.K][1][0]))
+                        raise
+                    value_s_np1 = value_s_np1 * (self.gamma**
+                                                (self.maxbatch - self.K))
+                value_R += value_s_np1
             #输出该记录
             self.output_method(self.history[0], value_R)
             #keep the length of history queue constant
@@ -142,8 +147,14 @@ class test:
             fout = open(self.config.get('REID', 'Q_G2G_MODEL_TRAIN_DATA'), 'a')
             fout.write(str(value_R))
             fout.write(' ' + '0:' + str(batch[1][0]))
-            for i in xrange(0, 3 + 2 * self.frame.k_size):
-                fout.write(' ' + str(i + 1) + ':' + str(batch[0][i]))
+            try:
+                for i in xrange(0, 3 + 2 * self.frame.k_size):
+                    fout.write(' ' + str(i + 1) + ':' + str(batch[0][i]))
+            except:
+                print(batch[0])
+                print(len(batch[0]))
+                print(3 + 2 * self.frame.k_size)
+                raise
             fout.write('\n')
             fout.close()
 
@@ -365,7 +376,7 @@ class test:
             with open(
                     os.path.join(
                         self.config.get('REID', 'REWARD_MODEL_SAVED_PATH'),
-                        'xgboost_output_nsteptd.log'), 'a') as f:
+                        'xgboost_output_nstepsarsa_origin_reward_norm.log'), 'a') as f:
                 f.write('{}, {}, {}, {}\n'.format(
                     self.dataset.size, self.Recall_edge, self.Precision_edge,
                     self.operatenum))
